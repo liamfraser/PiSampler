@@ -30,7 +30,7 @@ class Sample(object):
                                                             'sample' : self})
 
 class PiSampler(object):
-    def __init__(self, tempo=80, quantize=128):
+    def __init__(self, tempo=80, quantize=64):
         pygame.mixer.pre_init(44100, -16, 1, 512)
         pygame.init()
 
@@ -74,8 +74,24 @@ class PiSampler(object):
         self.record_next = True
 
     def undo_previous_loop(self, channel):
-        pass
+        if len(self.last_recorded_loop) == 0:
+            print "No previous loop to undo"
+            return
 
+        print "Undoing previous loop"
+
+        loop = self.last_recorded_loop.pop()
+
+        for bar in self.recording_data:
+            for quantize in bar:
+                removes = []
+                for sample in quantize:
+                    if sample['loop'] == loop:
+                        removes.append(sample)
+                
+                for sample in removes:
+                    quantize.remove(sample)
+                
     def add(self, sample):
         self.samples.append(sample)
 
@@ -130,7 +146,7 @@ class PiSampler(object):
 
     def run(self):
         self.loop_count = 0
-        self.last_recorded_loop = 0
+        self.last_recorded_loop = []
         self.bar_n = 0
         self.beat_n = 0
         self.quantize_beat_n = 0
@@ -150,7 +166,7 @@ class PiSampler(object):
                         self.record_next = False
                     elif self.recording:
                         self.recording = False
-                        self.last_recorded_loop = self.loop_count
+                        self.last_recorded_loop.append(self.loop_count)
 
                     self.loop_count += 1
 
