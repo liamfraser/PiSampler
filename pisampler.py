@@ -7,10 +7,14 @@ import os
 
 beat_leds = [2, 3, 4, 17]
 bar_leds = [27, 22, 10, 9]
+record_led = 11
+record = 19
+undo = 26
 debounce = 200 # ms
 
 class Drum(object):
-    def __init__(self, pin, sound):
+    def __init__(self, pin, sound, sampler):
+        self.sampler = sampler
         self.name = sound
         self.sound = pygame.mixer.Sound(os.path.join('sounds', sound))
         self.pin = pin
@@ -36,11 +40,29 @@ class PiSampler(object):
         self.drums = []
 
         GPIO.setmode(GPIO.BCM)
-        for pin in beat_leds + bar_leds:
+        for pin in beat_leds + bar_leds + [record_led]:
             GPIO.setup(pin, GPIO.OUT)
+
+        GPIO.setup(record, GPIO.IN)
+        GPIO.add_event_detect(record, GPIO.RISING,
+                              callback=self.record_next_loop,
+                              bouncetime=debounce)
+        GPIO.setup(undo, GPIO.IN)
+        GPIO.add_event_detect(undo, GPIO.RISING,
+                              callback=self.undo_previous_loop,
+                              bouncetime=debounce)
 
         self.quantize = quantize
         self.tempo = tempo
+
+        self.recording = False
+        self.record_next = False
+
+    def record_next_loop(self, channel):
+        self.record_next = True
+
+    def undo_previous_loop(self, channel):
+        pass
 
     def add(self, drum):
         self.drums.append(drum)
@@ -60,6 +82,15 @@ class PiSampler(object):
         # hits per bar.
         self.quantize_per_beat = 1 / (self.quantize * 4)
         self.quantize_seconds = self.quantize * 4 * self.beat_n_seconds
+
+    @property
+    def recording(self):
+        return self._recording
+
+    @recording.setter
+    def recording(self, value):
+        self._recording = value
+        GPIO.output(record_led, value)
 
     def do_leds(self, leds, n):
         count = 0
@@ -87,6 +118,14 @@ class PiSampler(object):
 
         while True:
             if self.quantize_n == 0:
+                if self.bar_n == 0 and self.beat_n == 0:
+                    if self.record_next:
+                        self.recording = True
+                        self.record_next = False
+                    elif self.recording:
+                        self.recording = False
+
+
                 self.do_leds(beat_leds, self.beat_n)
                 self.do_leds(bar_leds, self.bar_n)
                 self.do_metronome()
@@ -109,8 +148,8 @@ class PiSampler(object):
 
 if __name__ == "__main__":
     sampler = PiSampler(tempo=140)
-    sampler.add(Drum(05, 'kick01.wav'))
-    sampler.add(Drum(06, 'snare01.wav'))
-    sampler.add(Drum(13, 'clhat01.wav'))
+    sampler.add(Drum(05, 'kick01.wav', sampler))
+    sampler.add(Drum(06, 'snare01.wav', sampler))
+    sampler.add(Drum(13, 'clhat01.wav', sampler))
     sampler.metronome = True
     sampler.run()
