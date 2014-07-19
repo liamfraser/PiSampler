@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Written by Liam Fraser for Linux User & Developer
+
 import RPi.GPIO as GPIO
 import time
 import pygame
