@@ -30,7 +30,7 @@ class Sample(object):
                                                             'sample' : self})
 
 class PiSampler(object):
-    def __init__(self, tempo=80, quantize=4):
+    def __init__(self, tempo=80, quantize=128):
         pygame.mixer.pre_init(44100, -16, 1, 512)
         pygame.init()
 
@@ -94,12 +94,6 @@ class PiSampler(object):
         self.quantize_per_beat = self.quantize / 4
         self.quantize_seconds = self.seconds_per_beat / self.quantize_per_beat
 
-        print "Tempo is {0} bpm".format(tempo)
-        print "That's {0} seconds_per_beat".format(self.seconds_per_beat)
-        print "Quantize is {0} data points per bar".format(self.quantize)
-        print "Which is {0} data points per beat".format(self.quantize_per_beat)
-        print "This means we need to stop every {0}".format(self.quantize_seconds)
-
     @property
     def recording(self):
         return self._recording
@@ -132,7 +126,6 @@ class PiSampler(object):
         for sample_dict in self.recording_data[self.bar_n][self.quantize_n]:
             # Only play if it hasn't just been added
             if sample_dict['loop'] != self.loop_count:
-                print "Playing bar {0} quantize {1}".format(self.bar_n, self.quantize_n)
                 sample_dict['sample'].sound.play()
 
     def run(self):
@@ -144,9 +137,14 @@ class PiSampler(object):
         self.quantize_n = 0
 
         while True:
-            if self.quantize_n == 0:
+            if self.quantize_beat_n == 0:
+                # We're at the start of a new beat
+                self.do_leds(beat_leds, self.beat_n)
+                self.do_leds(bar_leds, self.bar_n)
+                self.do_metronome()
+                
                 # If we're at the start of a new loop
-                if self.bar_n == 0 and self.beat_n == 0:
+                if self.quantize_n == 0 and self.bar_n == 0:
                     if self.record_next:
                         self.recording = True
                         self.record_next = False
@@ -156,19 +154,12 @@ class PiSampler(object):
 
                     self.loop_count += 1
 
-                self.do_leds(beat_leds, self.beat_n)
-                self.do_leds(bar_leds, self.bar_n)
-                self.do_metronome()
-
             # Play any recorded hits
-            #self.play_recording()
+            self.play_recording()
 
-            # Wait for the next quantize and then do beat / bar / quantize math
+            # Wait for the next quantize and then calculate new
+            # beat/bar/quantize values
             time.sleep(self.quantize_seconds)
-
-            print "Bar {0}".format(self.bar_n)
-            print "Beat {0}".format(self.beat_n)
-            print "Quantize {0}".format(self.quantize_n)
 
             # If we are at a new beat, then increment beat counter
             if self.quantize_beat_n == self.quantize_per_beat - 1:
