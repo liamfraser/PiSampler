@@ -4,10 +4,10 @@ import RPi.GPIO as GPIO
 import time
 import pygame
 import os
-from threading import Thread
 
-beat_pins = [2, 3, 4, 17]
-debounce = 0.3
+beat_leds = [2, 3, 4, 17]
+bar_leds = [27, 22, 10, 9]
+debounce = 200 # ms
 
 class Drum(object):
     def __init__(self, pin, sound):
@@ -15,16 +15,12 @@ class Drum(object):
         self.sound = pygame.mixer.Sound(os.path.join('sounds', sound))
         self.pin = pin
         GPIO.setup(pin, GPIO.IN)
+        GPIO.add_event_detect(self.pin, GPIO.RISING, callback=self.play,
+                              bouncetime=debounce)
 
-    def play(self):
+    def play(self, channel):
         print self.name
         self.sound.play()
-
-    def check(self):
-        i = GPIO.input(self.pin)
-        if i == 1:
-            self.play()
-            time.sleep(debounce)
 
 class PiSampler(object):
     def __init__(self, tempo=80, quantize=1.0/16.0):
@@ -40,7 +36,7 @@ class PiSampler(object):
         self.drums = []
 
         GPIO.setmode(GPIO.BCM)
-        for pin in beat_pins:
+        for pin in beat_leds + bar_leds:
             GPIO.setup(pin, GPIO.OUT)
 
         self.quantize = quantize
@@ -65,17 +61,16 @@ class PiSampler(object):
         self.quantize_per_beat = 1 / (self.quantize * 4)
         self.quantize_seconds = self.quantize * 4 * self.beat_n_seconds
 
-    def do_leds(self):
-        # Beat LED's
+    def do_leds(self, leds, n):
         count = 0
-        for led in beat_pins:
-            if count == self.beat_n:
+        for led in leds:
+            if count == n:
                 GPIO.output(led, True) 
             else:
                 GPIO.output(led, False)
 
             count += 1
-    
+
     def do_metronome(self):
         if not self.metronome:
             return
@@ -92,12 +87,9 @@ class PiSampler(object):
 
         while True:
             if self.quantize_n == 0:
-                self.do_leds()
+                self.do_leds(beat_leds, self.beat_n)
+                self.do_leds(bar_leds, self.bar_n)
                 self.do_metronome()
-
-            # Poll for keypresses
-            for drum in self.drums:
-                drum.check()
 
             # Wait for the next quantize and then do beat / bar / quantize math
             time.sleep(self.quantize_seconds)
@@ -116,8 +108,9 @@ class PiSampler(object):
                     self.bar_n = 0
 
 if __name__ == "__main__":
-    sampler = PiSampler()
+    sampler = PiSampler(tempo=140)
     sampler.add(Drum(05, 'kick01.wav'))
     sampler.add(Drum(06, 'snare01.wav'))
+    sampler.add(Drum(13, 'clhat01.wav'))
     sampler.metronome = True
     sampler.run()
