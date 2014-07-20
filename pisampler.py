@@ -36,6 +36,11 @@ class PiSampler(object):
         pygame.mixer.pre_init(44100, -16, 1, 512)
         pygame.init()
 
+        self.quantize = quantize
+        self.tempo = tempo
+        self.recording = False
+        self.record_next = False
+
         self.metronome = False
         self.met_low = pygame.mixer.Sound(os.path.join('sounds', 'met_low.wav'))
         self.met_high = pygame.mixer.Sound(os.path.join('sounds', 'met_high.wav'))
@@ -66,11 +71,32 @@ class PiSampler(object):
                               callback=self.undo_previous_loop,
                               bouncetime=debounce)
 
-        self.quantize = quantize
-        self.tempo = tempo
+    @property
+    def tempo(self):
+        return self._tempo
+    
+    @tempo.setter
+    def tempo(self, tempo):
+        self._tempo = tempo
+        # Tempo is in beats per minute. There are 60 seconds in a minute.
+        self.seconds_per_beat = 60.0 / tempo
 
-        self.recording = False
-        self.record_next = False
+        # Time signature is assumed to be 4/4 (4 beats per bar) for simplicity.
+        # Quantize is how accurately we are sampling for button presses
+        self.quantize_per_beat = self.quantize / 4
+        self.quantize_seconds = self.seconds_per_beat / self.quantize_per_beat
+
+    def add(self, sample):
+        self.samples.append(sample)
+
+    @property
+    def recording(self):
+        return self._recording
+
+    @recording.setter
+    def recording(self, value):
+        self._recording = value
+        GPIO.output(record_led, value)
 
     def record_next_loop(self, channel):
         self.record_next = True
@@ -90,36 +116,9 @@ class PiSampler(object):
                 for sample in quantize:
                     if sample['loop'] == loop:
                         removes.append(sample)
-                
+
                 for sample in removes:
                     quantize.remove(sample)
-                
-    def add(self, sample):
-        self.samples.append(sample)
-
-    @property
-    def tempo(self):
-        return self._tempo
-    
-    @tempo.setter
-    def tempo(self, tempo):
-        self._tempo = tempo
-        # Tempo is in beats per minute. There are 60 seconds in a minute.
-        self.seconds_per_beat = 60.0 / tempo
-
-        # Time signature is assumed to be 4/4 (4 beats per bar) for simplicity.
-        # Quantize is how accurately we are sampling for button presses
-        self.quantize_per_beat = self.quantize / 4
-        self.quantize_seconds = self.seconds_per_beat / self.quantize_per_beat
-
-    @property
-    def recording(self):
-        return self._recording
-
-    @recording.setter
-    def recording(self, value):
-        self._recording = value
-        GPIO.output(record_led, value)
 
     def do_leds(self, leds, n):
         count = 0
